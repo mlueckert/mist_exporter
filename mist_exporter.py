@@ -26,7 +26,7 @@ def main(arguments):
         parser.add_argument('--site_name_filter',
                             help="Filter Sites by Name (Regex)", default=".*")
         parser.add_argument('--log_fullpath',
-                            help="Location of logfile. Will be rotated after 1day with 5 backups.", default="mist_exporter.log")
+                            help="Location of logfile. Will be rotated after 8hours with 5 backups.", default="mist_exporter.log")
         parser.add_argument(
             '--debug', help="Set loglevel to debug. Prints out a lot of json.", action="store_true")
         parser.add_argument('--baseurl', help="API URL if not EU",
@@ -40,7 +40,7 @@ def main(arguments):
         log_fullpath = args.log_fullpath
         logformat = "%(asctime)s:%(levelname)s:%(funcName)s:%(message)s"
         handler = TimedRotatingFileHandler(
-            filename=log_fullpath, when="d", interval=1, backupCount=5, encoding="utf-8")
+            filename=log_fullpath, when="h", interval=8, backupCount=5, encoding="utf-8")
         logging.basicConfig(handlers=[handler], level=logging.INFO,
                             format=logformat)
         if args.debug:
@@ -157,13 +157,26 @@ def get_value_from_path(dictionary, parts):
         return "False"
 
 
-def get_device_metrics(devices: dict):
+def get_device_metrics(devices: dict) -> list:
+    """Retrieves the defined metrics from the device json.
+
+    If a metric is not found we log it and add a value of 0 (maybe not ideal in all cases).
+    To add new metrics for devices add them to the metric_list variable
+
+    Args:
+        devices: json with all devices where we want the metrics.
+
+    Returns:
+        List will all metric strings in Prometheus format.
+    """
     count = len(devices)
     logging.info(f"Getting information for {count} devices from API")
     metrics_list = []
     metrics_list.append("# HELP mist_device Mist device metrics")
     for device in devices:
         device_name = get_value_from_path(device, "name")
+        #The metric_list dict has the following format
+        #[metric_name, value from json, {dict with labels}]
         metric_list = [
             ["mist_device_uptime_seconds",
                 get_value_from_path(device, "uptime"), {}],
@@ -182,9 +195,11 @@ def get_device_metrics(devices: dict):
                 device, "radio_stat.band_24.util_all"), {"band": "24"}],
         ]
 
+        # These labels will be added to all metrics
         all_labels_dict = {
             "hostname": device_name.upper()
         }
+        # These labels will be added to the device_info metric just for information purposes
         details_labels_dict = {
             "serial": get_value_from_path(device, "serial"),
             "model": get_value_from_path(device, "model"),
@@ -192,6 +207,7 @@ def get_device_metrics(devices: dict):
         }
         metrics_list.append(format_metric(
             "mist_device_info", {**details_labels_dict, **all_labels_dict}, 1))
+        # Merge of metrics and labels
         for item in metric_list:
             name = item[0]
             value = item[1]
@@ -215,7 +231,18 @@ def get_device_metrics(devices: dict):
     return metrics_list
 
 
-def convert_string_value_to_bool(metric_value):
+def convert_string_value_to_bool(metric_value: str):
+    """Map string values to bool.
+
+    Some string values from the API needs to be mapped to bool because we
+    want to use them as values for our metric.
+
+    Args:
+        metric_name: String metric value (e.g. connected).
+
+    Returns:
+        Mapped bool for the value defined
+    """
     if(metric_value in ["connected"]):
         return 0
     elif(metric_value in ["disconnected"]):
