@@ -13,9 +13,10 @@ Last Change: 04.12.2023 M. Lueckert
 import sys
 import argparse
 import requests as req
+import urllib3
 import json
 import logging
-from logging.handlers import TimedRotatingFileHandler
+from logging.handlers import RotatingFileHandler
 import re
 
 def main(arguments):
@@ -27,8 +28,10 @@ def main(arguments):
         parser.add_argument('--org_id', help="Organisation ID", required=True)
         parser.add_argument('--site_name_filter',
                             help="Filter Sites by Name (Regex)", default=".*")
+        parser.add_argument(
+            '--ignore_ssl', help="Ignore self signed certificates in chain.", action="store_true", default=False)
         parser.add_argument('--log_fullpath',
-                            help="Location of logfile. Will be rotated after 8hours with 5 backups.", default="mist_exporter.log")
+                            help="Location of logfile. Will be rotated 5MB with 5 backups.", default="mist_exporter.log")
         parser.add_argument(
             '--debug', help="Set loglevel to debug. Prints out a lot of json.", action="store_true")
         parser.add_argument('--baseurl', help="API URL if not EU",
@@ -41,8 +44,8 @@ def main(arguments):
         site_name_filter = args.site_name_filter
         log_fullpath = args.log_fullpath
         logformat = "%(asctime)s:%(levelname)s:%(funcName)s:%(message)s"
-        handler = TimedRotatingFileHandler(
-            filename=log_fullpath, when="h", interval=8, backupCount=5, encoding="utf-8")
+        handler = RotatingFileHandler(
+            filename=log_fullpath, maxBytes=(5242880), backupCount=5, encoding="utf-8")
         logging.basicConfig(handlers=[handler], level=logging.INFO,
                             format=logformat)
         if args.debug:
@@ -50,12 +53,18 @@ def main(arguments):
             for myhandler in logging.getLogger().handlers:
                 myhandler.setLevel(logging.DEBUG)
         logging.info("Mist Exporter starting")
+        if args.ignore_ssl:
+            logging.info("Disable SSL verification")
+            urllib3.disable_warnings()
+            verify=False
+        else:
+            verify=True
         headers = {"Authorization": f"Token {api_token}",
                    'Content-Type': 'application/json'}
-        sites = get_sites(baseurl, org_id, site_name_filter, headers)
+        sites = get_sites(baseurl, org_id, site_name_filter, headers, verify)
         #self_info = get_self(baseurl, headers)
         siteids = [x['id'] for x in sites]
-        devices = get_devices(baseurl, siteids, headers)
+        devices = get_devices(baseurl, siteids, headers, verify)
         metrics = get_device_metrics(devices)
         metrics.append("mist_exporter_status 1")
         print("\n".join(metrics))
@@ -66,7 +75,7 @@ def main(arguments):
     logging.info("Mist Exporter finished")
 
 
-def get_sites(baseurl, org_id, site_filter, headers) -> list:
+def get_sites(baseurl, org_id, site_filter, headers, verify) -> list:
     """Retrieves sites from MIST API.
 
     Retrieves sites from the API. Can be filtered with site_filter.
@@ -82,7 +91,7 @@ def get_sites(baseurl, org_id, site_filter, headers) -> list:
         A list with the filtered json object of the sites.
     """
     url = f"{baseurl}/orgs/{org_id}/sites"
-    response = req.get(url, headers=headers)
+    response = req.get(url, headers=headers, verify=verify)
     sites = response.json()
     site_count = len(sites)
     sites_filtered = []
@@ -96,7 +105,7 @@ def get_sites(baseurl, org_id, site_filter, headers) -> list:
     return sites_filtered
 
 
-def get_devices(baseurl, siteids: list, headers) -> list:
+def get_devices(baseurl, siteids: list, headers, verify) -> list:
     """Retrieves devices from MIST API.
 
     Retrieves devices from the API.
@@ -112,15 +121,15 @@ def get_devices(baseurl, siteids: list, headers) -> list:
     json_list = []
     for siteid in siteids:
         url = f"{baseurl}/sites/{siteid}/stats/devices"
-        response = req.get(url, headers=headers)
+        response = req.get(url, headers=headers, verify=verify)
         json_list = json_list + response.json()
     logging.debug(str(json_list))
     return json_list
 
 
-def get_self(baseurl, headers) -> json:
+def get_self(baseurl, headers, verify) -> json:
     url = f"{baseurl}/self"
-    response = req.get(url, headers=headers)
+    response = req.get(url, headers=headers, verify=verify)
     return response.json()
 
 
@@ -220,7 +229,7 @@ def get_device_metrics(devices: dict) -> list:
                 value = convert_string_value_to_bool(value)
             else:
                 value = 0
-                logging.warning(
+                logging.debug(
                     f'{device_name} - Metric {name} not found for device. Setting 0 value.')
             metrics_list.append(format_metric(name, labels_merged, value))
     device_count = len(devices)
