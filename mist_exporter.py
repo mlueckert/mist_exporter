@@ -6,6 +6,8 @@ This script will export device metrics of MIST Access Points from the MIST API.
 The format of the exported metrics can be used in Prometheus.
 This script is well suited to be called from exporter_exporter.
 
+Last Change: 04.12.2023 M. Lueckert
+
 """
 
 import sys
@@ -181,6 +183,7 @@ def get_device_metrics(devices: dict) -> list:
             ["mist_device_uptime_seconds",
                 get_value_from_path(device, "uptime"), {}],
             ["mist_device_status", get_value_from_path(device, "status"), {}],
+            ["mist_device_last_seen_seconds", get_value_from_path(device, "last_seen"), {}],
             ["mist_device_num_clients", get_value_from_path(
                 device, "num_clients"), {}],
             ["mist_device_port_stat_tx_bytes", get_value_from_path(
