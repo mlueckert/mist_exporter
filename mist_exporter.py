@@ -192,6 +192,7 @@ def get_device_metrics(devices: dict) -> list:
             ["mist_device_uptime_seconds",
                 get_value_from_path(device, "uptime"), {}],
             ["mist_device_status", get_value_from_path(device, "status"), {}],
+            ["mist_device_power_constrained", get_value_from_path(device, "power_constrained"), {}],
             ["mist_device_last_seen_seconds", get_value_from_path(device, "last_seen"), {}],
             ["mist_device_num_clients", get_value_from_path(
                 device, "num_clients"), {}],
@@ -255,9 +256,9 @@ def convert_string_value_to_bool(metric_value: str):
     Returns:
         Mapped bool for the value defined
     """
-    if(metric_value in ["connected"]):
+    if(metric_value in ["connected","false"]):
         return 0
-    elif(metric_value in ["disconnected"]):
+    elif(metric_value in ["disconnected","true"]):
         return 1
     else:
         return metric_value
