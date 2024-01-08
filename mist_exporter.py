@@ -20,24 +20,24 @@ from logging.handlers import RotatingFileHandler
 import re
 
 def main(arguments):
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('--api_token', help="API Token", required=True)
+    parser.add_argument('--org_id', help="Organisation ID", required=True)
+    parser.add_argument('--site_name_filter',
+                        help="Filter Sites by Name (Regex)", default=".*")
+    parser.add_argument(
+        '--ignore_ssl', help="Ignore self signed certificates in chain.", action="store_true", default=False)
+    parser.add_argument('--log_fullpath',
+                        help="Location of logfile. Will be rotated 5MB with 5 backups.", default="mist_exporter.log")
+    parser.add_argument(
+        '--debug', help="Set loglevel to debug. Prints out a lot of json.", action="store_true")
+    parser.add_argument('--baseurl', help="API URL if not EU",
+                        default="https://api.eu.mist.com/api/v1")   
+    args = parser.parse_args(arguments)
+    
     try:
-        parser = argparse.ArgumentParser(
-            description=__doc__,
-            formatter_class=argparse.RawDescriptionHelpFormatter)
-        parser.add_argument('--api_token', help="API Token", required=True)
-        parser.add_argument('--org_id', help="Organisation ID", required=True)
-        parser.add_argument('--site_name_filter',
-                            help="Filter Sites by Name (Regex)", default=".*")
-        parser.add_argument(
-            '--ignore_ssl', help="Ignore self signed certificates in chain.", action="store_true", default=False)
-        parser.add_argument('--log_fullpath',
-                            help="Location of logfile. Will be rotated 5MB with 5 backups.", default="mist_exporter.log")
-        parser.add_argument(
-            '--debug', help="Set loglevel to debug. Prints out a lot of json.", action="store_true")
-        parser.add_argument('--baseurl', help="API URL if not EU",
-                            default="https://api.eu.mist.com/api/v1")
-
-        args = parser.parse_args(arguments)
         api_token = args.api_token
         org_id = args.org_id
         baseurl = args.baseurl
