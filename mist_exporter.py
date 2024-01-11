@@ -6,7 +6,7 @@ This script will export device metrics of MIST Access Points from the MIST API.
 The format of the exported metrics can be used in Prometheus.
 This script is well suited to be called from exporter_exporter.
 
-Last Change: 04.12.2023 M. Lueckert
+Last Change: 11.01.2024 M. Lueckert
 
 """
 
@@ -19,24 +19,37 @@ import logging
 from logging.handlers import RotatingFileHandler
 import re
 
+
 def main(arguments):
     parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--api_token', help="API Token", required=True)
-    parser.add_argument('--org_id', help="Organisation ID", required=True)
-    parser.add_argument('--site_name_filter',
-                        help="Filter Sites by Name (Regex)", default=".*")
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument("--api_token", help="API Token", required=True)
+    parser.add_argument("--org_id", help="Organisation ID", required=True)
     parser.add_argument(
-        '--ignore_ssl', help="Ignore self signed certificates in chain.", action="store_true", default=False)
-    parser.add_argument('--log_fullpath',
-                        help="Location of logfile. Will be rotated 5MB with 5 backups.", default="mist_exporter.log")
+        "--site_name_filter", help="Filter Sites by Name (Regex)", default=".*"
+    )
     parser.add_argument(
-        '--debug', help="Set loglevel to debug. Prints out a lot of json.", action="store_true")
-    parser.add_argument('--baseurl', help="API URL if not EU",
-                        default="https://api.eu.mist.com/api/v1")   
+        "--ignore_ssl",
+        help="Ignore self signed certificates in chain.",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--log_fullpath",
+        help="Location of logfile. Will be rotated 5MB with 5 backups.",
+        default="mist_exporter.log",
+    )
+    parser.add_argument(
+        "--debug",
+        help="Set loglevel to debug. Prints out a lot of json.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--baseurl", help="API URL if not EU", default="https://api.eu.mist.com/api/v1"
+    )
     args = parser.parse_args(arguments)
-    
+
     try:
         api_token = args.api_token
         org_id = args.org_id
@@ -45,9 +58,9 @@ def main(arguments):
         log_fullpath = args.log_fullpath
         logformat = "%(asctime)s:%(levelname)s:%(funcName)s:%(message)s"
         handler = RotatingFileHandler(
-            filename=log_fullpath, maxBytes=(5242880), backupCount=5, encoding="utf-8")
-        logging.basicConfig(handlers=[handler], level=logging.INFO,
-                            format=logformat)
+            filename=log_fullpath, maxBytes=(5242880), backupCount=5, encoding="utf-8"
+        )
+        logging.basicConfig(handlers=[handler], level=logging.INFO, format=logformat)
         if args.debug:
             logging.getLogger().setLevel(logging.DEBUG)
             for myhandler in logging.getLogger().handlers:
@@ -56,21 +69,24 @@ def main(arguments):
         if args.ignore_ssl:
             logging.info("Disable SSL verification")
             urllib3.disable_warnings()
-            verify=False
+            verify = False
         else:
-            verify=True
-        headers = {"Authorization": f"Token {api_token}",
-                   'Content-Type': 'application/json'}
+            verify = True
+        headers = {
+            "Authorization": f"Token {api_token}",
+            "Content-Type": "application/json",
+        }
         sites = get_sites(baseurl, org_id, site_name_filter, headers, verify)
-        #self_info = get_self(baseurl, headers)
-        siteids = [x['id'] for x in sites]
+        # self_info = get_self(baseurl, headers)
+        siteids = [x["id"] for x in sites]
         devices = get_devices(baseurl, siteids, headers, verify)
         metrics = get_device_metrics(devices)
         metrics.append("mist_exporter_status 1")
         print("\n".join(metrics))
+        logging.info("All went fine. Prometheus metrics printed to stdout.")
     except:
         print("mist_exporter_status 0")
-        logging.exception('')
+        logging.exception("An error occured. See error details.")
 
     logging.info("Mist Exporter finished")
 
@@ -100,7 +116,8 @@ def get_sites(baseurl, org_id, site_filter, headers, verify) -> list:
             sites_filtered.append(site)
     site_count_filtered = len(sites_filtered)
     logging.info(
-        f"Got {site_count} site(s) from API. {site_count_filtered} site(s) after filtering with filter {site_filter}")
+        f"Got {site_count} site(s) from API. {site_count_filtered} site(s) after filtering with filter {site_filter}"
+    )
     logging.debug(str(sites_filtered))
     return sites_filtered
 
@@ -149,17 +166,16 @@ def format_metric(metric_name: str, labeldict: dict, value: str) -> str:
     """
     string_labels = ""
     if labeldict:
-        formatted_labels = [
-            f'{x[0].lower()}="{x[1]}"' for x in labeldict.items()]
+        formatted_labels = [f'{x[0].lower()}="{x[1]}"' for x in labeldict.items()]
         string_labels = ", ".join(formatted_labels)
     time_series = f"{metric_name.lower()}{{{string_labels}}} {value}"
     return time_series
 
 
 def get_value_from_path(dictionary, parts):
-    """ extracts a value from a dictionary using a dotted path string """
+    """extracts a value from a dictionary using a dotted path string"""
     if type(parts) is str:
-        parts = parts.split('.')
+        parts = parts.split(".")
     try:
         if len(parts) > 1:
             return get_value_from_path(dictionary[parts[0]], parts[1:])
@@ -186,40 +202,62 @@ def get_device_metrics(devices: dict) -> list:
     metrics_list.append("# HELP mist_device Mist device metrics")
     for device in devices:
         device_name = get_value_from_path(device, "name")
-        #The metric_list dict has the following format
-        #[metric_name, value from json, {dict with labels}]
+        # The metric_list dict has the following format
+        # [metric_name, value from json, {dict with labels}]
         metric_list = [
-            ["mist_device_uptime_seconds",
-                get_value_from_path(device, "uptime"), {}],
+            ["mist_device_uptime_seconds", get_value_from_path(device, "uptime"), {}],
             ["mist_device_status", get_value_from_path(device, "status"), {}],
-            ["mist_device_power_constrained", get_value_from_path(device, "power_constrained"), {}],
-            ["mist_device_last_seen_seconds", get_value_from_path(device, "last_seen"), {}],
-            ["mist_device_num_clients", get_value_from_path(
-                device, "num_clients"), {}],
-            ["mist_device_port_stat_tx_bytes", get_value_from_path(
-                device, "port_stat.eth0.tx_bytes"), {"ifName": "eth0"}],
-            ["mist_device_port_stat_rx_bytes", get_value_from_path(
-                device, "port_stat.eth0.rx_bytes"), {"ifName": "eth0"}],
-            ["mist_device_radio_stat_util_all", get_value_from_path(
-                device, "radio_stat.band_6.util_all"), {"band": "6"}],
-            ["mist_device_radio_stat_util_all", get_value_from_path(
-                device, "radio_stat.band_5.util_all"), {"band": "5"}],
-            ["mist_device_radio_stat_util_all", get_value_from_path(
-                device, "radio_stat.band_24.util_all"), {"band": "24"}],
+            [
+                "mist_device_power_constrained",
+                get_value_from_path(device, "power_constrained"),
+                {},
+            ],
+            [
+                "mist_device_last_seen_seconds",
+                get_value_from_path(device, "last_seen"),
+                {},
+            ],
+            ["mist_device_num_clients", get_value_from_path(device, "num_clients"), {}],
+            [
+                "mist_device_port_stat_tx_bytes",
+                get_value_from_path(device, "port_stat.eth0.tx_bytes"),
+                {"ifName": "eth0"},
+            ],
+            [
+                "mist_device_port_stat_rx_bytes",
+                get_value_from_path(device, "port_stat.eth0.rx_bytes"),
+                {"ifName": "eth0"},
+            ],
+            [
+                "mist_device_radio_stat_util_all",
+                get_value_from_path(device, "radio_stat.band_6.util_all"),
+                {"band": "6"},
+            ],
+            [
+                "mist_device_radio_stat_util_all",
+                get_value_from_path(device, "radio_stat.band_5.util_all"),
+                {"band": "5"},
+            ],
+            [
+                "mist_device_radio_stat_util_all",
+                get_value_from_path(device, "radio_stat.band_24.util_all"),
+                {"band": "24"},
+            ],
         ]
 
         # These labels will be added to all metrics
-        all_labels_dict = {
-            "hostname": device_name.upper()
-        }
+        all_labels_dict = {"hostname": device_name.upper()}
         # These labels will be added to the device_info metric just for information purposes
         details_labels_dict = {
             "serial": get_value_from_path(device, "serial"),
             "model": get_value_from_path(device, "model"),
             "hw_rev": get_value_from_path(device, "hw_rev"),
         }
-        metrics_list.append(format_metric(
-            "mist_device_info", {**details_labels_dict, **all_labels_dict}, 1))
+        metrics_list.append(
+            format_metric(
+                "mist_device_info", {**details_labels_dict, **all_labels_dict}, 1
+            )
+        )
         # Merge of metrics and labels
         for item in metric_list:
             name = item[0]
@@ -231,16 +269,16 @@ def get_device_metrics(devices: dict) -> list:
             else:
                 value = 0
                 logging.debug(
-                    f'{device_name} - Metric {name} not found for device. Setting 0 value.')
+                    f"{device_name} - Metric {name} not found for device. Setting 0 value."
+                )
             metrics_list.append(format_metric(name, labels_merged, value))
     device_count = len(devices)
     metric_count = len(metrics_list)
-    logging.info(
-        f"Got {len(metrics_list)} metrics for {device_count} device(s) from API")
-    metrics_list.append(format_metric(
-        "mist_device_total_count", [], device_count))
-    metrics_list.append(format_metric(
-        "mist_device_metric_total_count", [], metric_count))
+    logging.info(f"Got {metric_count} metrics for {device_count} device(s) from API")
+    metrics_list.append(format_metric("mist_device_total_count", [], device_count))
+    metrics_list.append(
+        format_metric("mist_device_metric_total_count", [], metric_count)
+    )
     return metrics_list
 
 
@@ -256,13 +294,15 @@ def convert_string_value_to_bool(metric_value: str):
     Returns:
         Mapped bool for the value defined
     """
-    if(metric_value in ["connected","false"]):
+    if metric_value in ["connected", "false"]:
         return 0
-    elif(metric_value in ["disconnected","true"]):
+    elif metric_value in ["disconnected", "true"]:
         return 1
+    elif metric_value in ["upgrading"]:
+        return 2
     else:
         return metric_value
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))

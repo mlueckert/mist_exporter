@@ -20,3 +20,9 @@ mist_device_port_stat_eth0_tx_bytes{hostname="MISTDEVICE"} 1.670463161e+09
 mist_device_power_constrained{hostname="MISTDEVICE"} 0
 mist_device_total_count 1
 mist_exporter_status 0
+
+## mist_device_status Values
+
+0 = Connected or field not present in JSON
+1 = Disconnected
+2 = Upgrading
