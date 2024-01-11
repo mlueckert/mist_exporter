@@ -26,3 +26,4 @@ mist_exporter_status 0
 0 = Connected or field not present in JSON
 1 = Disconnected
 2 = Upgrading
+3 = Restarting

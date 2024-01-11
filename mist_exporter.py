@@ -300,6 +300,8 @@ def convert_string_value_to_bool(metric_value: str):
         return 1
     elif metric_value in ["upgrading"]:
         return 2
+    elif metric_value in ["restarting"]:
+        return 3
     else:
         return metric_value
 
