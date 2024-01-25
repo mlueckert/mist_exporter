@@ -6,7 +6,7 @@ This script will export device metrics of MIST Access Points from the MIST API.
 The format of the exported metrics can be used in Prometheus.
 This script is well suited to be called from exporter_exporter.
 
-Last Change: 11.01.2024 M. Lueckert
+Last Change: 22.01.2024 M. Lueckert
 
 """
 
@@ -76,11 +76,14 @@ def main(arguments):
             "Authorization": f"Token {api_token}",
             "Content-Type": "application/json",
         }
+
         sites = get_sites(baseurl, org_id, site_name_filter, headers, verify)
         # self_info = get_self(baseurl, headers)
         siteids = [x["id"] for x in sites]
         devices = get_devices(baseurl, siteids, headers, verify)
-        metrics = get_device_metrics(devices)
+        device_metrics_dict = get_device_metrics(devices)
+        edge_metrics_dict = get_edge_metrics(f"{baseurl}/orgs/{org_id}", headers, verify)
+        metrics = device_metrics_dict + edge_metrics_dict
         metrics.append("mist_exporter_status 1")
         print("\n".join(metrics))
         logging.info("All went fine. Prometheus metrics printed to stdout.")
@@ -120,6 +123,137 @@ def get_sites(baseurl, org_id, site_filter, headers, verify) -> list:
     )
     logging.debug(str(sites_filtered))
     return sites_filtered
+
+
+def get_edge_metrics(baseurl, headers, verify) -> list:
+    """Retrieves edge device stats from MIST API.
+
+    Retrieves edge device stats from the API.
+
+    Args:
+        baseurl: The baseurl of the MIST API.
+        siteids: List with all siteids to look for devices.
+        headers: The authentication headers required for the API.
+
+    Returns:
+        A list with json object of all device details.
+    """
+    devices = []
+    url = f"{baseurl}/stats/mxedges"
+    response = req.get(url, headers=headers, verify=verify)
+    devices = response.json()
+    logging.debug(str(devices))
+    metrics_list = []
+    for device in devices:
+        device_name = get_value_from_path(device, "name")
+        metric_list = [
+            ["mist_edge_uptime_seconds", get_value_from_path(device, "uptime"), {}],
+            ["mist_edge_status", get_value_from_path(device, "status"), {}],
+            [
+                "mist_edge_cpu_usage_pct",
+                get_value_from_path(device, "cpu_stat.usage"),
+                {},
+            ],
+            [
+                "mist_edge_memory_usage_pct",
+                get_value_from_path(device, "memory_stat.usage"),
+                {},
+            ],
+            [
+                "mist_edge_temperatures_degree",
+                get_value_from_path(device, "sensor_stat.temperatures.CPU1.degree"),
+                {"component": "cpu1"},
+            ],
+            [
+                "mist_edge_temperatures_degree",
+                get_value_from_path(device, "sensor_stat.temperatures.CPU2.degree"),
+                {"component": "cpu2"},
+            ],
+            [
+                "mist_edge_temperatures_degree",
+                get_value_from_path(device, "sensor_stat.temperatures.Exhaust.degree"),
+                {"component": "exhaust"},
+            ],
+            [
+                "mist_edge_temperatures_degree",
+                get_value_from_path(device, "sensor_stat.temperatures.Inlet.degree"),
+                {"component": "inlet"},
+            ],
+            [
+                "mist_edge_psu_redundancies",
+                get_psu_redundancy(device),
+                {
+                    "redundancy": get_value_from_path(
+                        device, "sensor_stat.redundancies.PS.state"
+                    )
+                },
+            ],
+            [
+                "mist_edge_fan_redundancies",
+                get_fan_redundancy(device),
+                {
+                    "redundancy": get_value_from_path(
+                        device, "sensor_stat.redundancies.Fan.state"
+                    )
+                },
+            ],
+        ]
+        # These labels will be added to all metrics
+        all_labels_dict = {"hostname": device_name.upper()}
+        # These labels will be added to the device_info metric just for information purposes
+        details_labels_dict = {
+            "serial": get_value_from_path(device, "serial_no"),
+            "model": get_value_from_path(device, "model"),
+        }
+        metrics_list.append(
+            format_metric(
+                "mist_edge_info", {**details_labels_dict, **all_labels_dict}, 1
+            )
+        )
+        # Merge of metrics and labels
+        for item in metric_list:
+            name = item[0]
+            value = item[1]
+            device_labels_dict = item[2]
+            metric_not_found_dict = {}
+            if value != "False":
+                value = map_string_value_to_int(value)
+            else:
+                value = 0
+                metric_not_found_dict = {"error": "Metric not found"}
+                logging.debug(
+                    f"{device_name} - Metric {name} not found for device. Setting 0 value."
+                )
+            labels_merged = {
+                **all_labels_dict,
+                **device_labels_dict,
+                **metric_not_found_dict,
+            }
+            metrics_list.append(format_metric(name, labels_merged, value))
+    device_count = len(devices)
+    metric_count = len(metrics_list)
+    logging.info(f"Got {metric_count} metrics for {device_count} edge device(s) from API")
+    metrics_list.append(format_metric("mist_edge_total_count", [], device_count))
+    metrics_list.append(
+        format_metric("mist_edge_metric_total_count", [], metric_count)
+    )
+    return metrics_list
+
+
+def get_psu_redundancy(device_json):
+    value = get_value_from_path(device_json, "sensor_stat.redundancies.PS.state")
+    if value == "fullyredundant":
+        return 0
+    else:
+        return 1
+
+
+def get_fan_redundancy(device_json):
+    value = get_value_from_path(device_json, "sensor_stat.redundancies.Fan.state")
+    if value == "fullyredundant":
+        return 0
+    else:
+        return 1
 
 
 def get_devices(baseurl, siteids: list, headers, verify) -> list:
@@ -265,7 +399,7 @@ def get_device_metrics(devices: dict) -> list:
             device_labels_dict = item[2]
             labels_merged = {**all_labels_dict, **device_labels_dict}
             if value != "False":
-                value = convert_string_value_to_bool(value)
+                value = map_string_value_to_int(value)
             else:
                 value = 0
                 logging.debug(
@@ -274,7 +408,7 @@ def get_device_metrics(devices: dict) -> list:
             metrics_list.append(format_metric(name, labels_merged, value))
     device_count = len(devices)
     metric_count = len(metrics_list)
-    logging.info(f"Got {metric_count} metrics for {device_count} device(s) from API")
+    logging.info(f"Got {metric_count} metrics for {device_count} AP device(s) from API")
     metrics_list.append(format_metric("mist_device_total_count", [], device_count))
     metrics_list.append(
         format_metric("mist_device_metric_total_count", [], metric_count)
@@ -282,19 +416,19 @@ def get_device_metrics(devices: dict) -> list:
     return metrics_list
 
 
-def convert_string_value_to_bool(metric_value: str):
+def map_string_value_to_int(metric_value: str):
     """Map string values to bool.
 
-    Some string values from the API needs to be mapped to bool because we
+    Some string values from the API needs to be mapped to int because we
     want to use them as values for our metric.
 
     Args:
         metric_name: String metric value (e.g. connected).
 
     Returns:
-        Mapped bool for the value defined
+        Mapped int for the value defined
     """
-    if metric_value in ["connected", "false"]:
+    if metric_value in ["connected", "false", "FullyRedundant"]:
         return 0
     elif metric_value in ["disconnected", "true"]:
         return 1
