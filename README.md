@@ -1,11 +1,24 @@
 # Introduction
 
-This is a Prometheus Exporter for Juniper Mist Access Point metrics gathered from the Mist Cloud API.  
+This is a Prometheus Exporter for Juniper Mist Access Point and Edge device metrics gathered from the Mist Cloud API.  
 
 Check the documentation of the mist_exporter.py for further details.  
 
 ## Exported Metrics
 
+mist_edge_info{serial="343434", model="me-x5-m", hostname="EDGEDEVICE"} 1
+mist_edge_uptime_seconds{hostname="EDGEDEVICE"} 7165233
+mist_edge_status{hostname="EDGEDEVICE"} 0
+mist_edge_cpu_usage_pct{hostname="EDGEDEVICE"} 9
+mist_edge_memory_usage_pct{hostname="EDGEDEVICE"} 17
+mist_edge_temperatures_degree{hostname="EDGEDEVICE", component="cpu1"} 40.0
+mist_edge_temperatures_degree{hostname="EDGEDEVICE", component="cpu2"} 34.0
+mist_edge_temperatures_degree{hostname="EDGEDEVICE", component="exhaust"} 33.0
+mist_edge_temperatures_degree{hostname="EDGEDEVICE", component="inlet"} 23.0
+mist_edge_psu_redundancies{hostname="EDGEDEVICE", redundancy="fullyredundant"} 0
+mist_edge_fan_redundancies{hostname="EDGEDEVICE", redundancy="fullyredundant"} 0
+mist_edge_total_count{} 4
+mist_edge_metric_total_count{} 44
 mist_device_num_clients{hostname="MISTDEVICE"} 2
 mist_device_radio_stat_band_24_util_all{hostname="MISTDEVICE"} 31
 mist_device_metric_total_count 11
