@@ -273,7 +273,11 @@ def get_devices(baseurl, siteids: list, headers, verify) -> list:
     for siteid in siteids:
         url = f"{baseurl}/sites/{siteid}/stats/devices"
         response = req.get(url, headers=headers, verify=verify)
-        json_list = json_list + response.json()
+        rjson = response.json()
+        if response.status_code != 200:
+            logging.warning(f'Received http error {response.status_code} while retrieving device details for siteid "{siteid}". Json response: {str(rjson)}')
+        else:
+            json_list = json_list + rjson
     logging.debug(str(json_list))
     return json_list
 
