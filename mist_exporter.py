@@ -82,16 +82,34 @@ def main(arguments):
         siteids = [x["id"] for x in sites]
         devices = get_devices(baseurl, siteids, headers, verify)
         device_metrics_dict = get_device_metrics(devices)
-        edge_metrics_dict = get_edge_metrics(f"{baseurl}/orgs/{org_id}", headers, verify)
+        edge_metrics_dict = get_edge_metrics(
+            f"{baseurl}/orgs/{org_id}", headers, verify
+        )
         metrics = device_metrics_dict + edge_metrics_dict
         metrics.append("mist_exporter_status 1")
         print("\n".join(metrics))
         logging.info("All went fine. Prometheus metrics printed to stdout.")
-    except:
+
+    except Exception as e:
         print("mist_exporter_status 0")
         logging.exception("An error occured. See error details.")
 
     logging.info("Mist Exporter finished")
+
+
+def test_status_code(response):
+    """
+    Raises an exception if the response status code is not 200 (OK).
+
+    Args:
+        response: The response object from an API call (e.g., requests.Response).  Must have a `status_code` and `reason` attribute.
+
+    Raises:
+        Exception: If the status code is not 200. The exception message includes the status code and reason.
+    """
+    if response.status_code != 200:
+        message = f"MIST API returned an error {response.status_code} {response.reason}"
+        raise Exception(message)
 
 
 def get_sites(baseurl, org_id, site_filter, headers, verify) -> list:
@@ -111,6 +129,7 @@ def get_sites(baseurl, org_id, site_filter, headers, verify) -> list:
     """
     url = f"{baseurl}/orgs/{org_id}/sites"
     response = req.get(url, headers=headers, verify=verify)
+    test_status_code(response)
     sites = response.json()
     site_count = len(sites)
     sites_filtered = []
@@ -141,11 +160,14 @@ def get_edge_metrics(baseurl, headers, verify) -> list:
     devices = []
     url = f"{baseurl}/stats/mxedges"
     response = req.get(url, headers=headers, verify=verify)
+    test_status_code(response)
     devices = response.json()
     logging.debug(str(devices))
     metrics_list = []
     for device in devices:
         device_name = get_value_from_path(device, "name")
+        if not device_name:
+            continue
         metric_list = [
             ["mist_edge_uptime_seconds", get_value_from_path(device, "uptime"), {}],
             ["mist_edge_status", get_value_from_path(device, "status"), {}],
@@ -232,11 +254,11 @@ def get_edge_metrics(baseurl, headers, verify) -> list:
             metrics_list.append(format_metric(name, labels_merged, value))
     device_count = len(devices)
     metric_count = len(metrics_list)
-    logging.info(f"Got {metric_count} metrics for {device_count} edge device(s) from API")
-    metrics_list.append(format_metric("mist_edge_total_count", [], device_count))
-    metrics_list.append(
-        format_metric("mist_edge_metric_total_count", [], metric_count)
+    logging.info(
+        f"Got {metric_count} metrics for {device_count} edge device(s) from API"
     )
+    metrics_list.append(format_metric("mist_edge_total_count", [], device_count))
+    metrics_list.append(format_metric("mist_edge_metric_total_count", [], metric_count))
     return metrics_list
 
 
@@ -273,9 +295,12 @@ def get_devices(baseurl, siteids: list, headers, verify) -> list:
     for siteid in siteids:
         url = f"{baseurl}/sites/{siteid}/stats/devices"
         response = req.get(url, headers=headers, verify=verify)
+        test_status_code(response)
         rjson = response.json()
         if response.status_code != 200:
-            logging.warning(f'Received http error {response.status_code} while retrieving device details for siteid "{siteid}". Json response: {str(rjson)}')
+            logging.warning(
+                f'Received http error {response.status_code} while retrieving device details for siteid "{siteid}". Json response: {str(rjson)}'
+            )
         else:
             json_list = json_list + rjson
     logging.debug(str(json_list))
@@ -285,6 +310,7 @@ def get_devices(baseurl, siteids: list, headers, verify) -> list:
 def get_self(baseurl, headers, verify) -> json:
     url = f"{baseurl}/self"
     response = req.get(url, headers=headers, verify=verify)
+    test_status_code(response)
     return response.json()
 
 
@@ -340,6 +366,8 @@ def get_device_metrics(devices: dict) -> list:
     metrics_list.append("# HELP mist_device Mist device metrics")
     for device in devices:
         device_name = get_value_from_path(device, "name")
+        if not device_name:
+            continue
         # The metric_list dict has the following format
         # [metric_name, value from json, {dict with labels}]
         metric_list = [
