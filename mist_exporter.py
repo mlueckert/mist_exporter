@@ -127,7 +127,7 @@ def get_sites(baseurl, org_id, site_filter, headers, verify) -> list:
     Returns:
         A list with the filtered json object of the sites.
     """
-    url = f"{baseurl}/orgs/{org_id}/sites"
+    url = f"{baseurl}/orgs/{org_id}/sites?limit=1000"
     response = req.get(url, headers=headers, verify=verify)
     test_status_code(response)
     sites = response.json()
@@ -293,8 +293,7 @@ def get_devices(baseurl, siteids: list, headers, verify) -> list:
     """
     json_list = []
     for siteid in siteids:
-        url = f"{baseurl}/sites/{siteid}/stats/devices"
-        response = req.get(url, headers=headers, verify=verify)
+        url = f"{baseurl}/sites/{siteid}/stats/devices?limit=1000"
         test_status_code(response)
         rjson = response.json()
         if response.status_code != 200:
