@@ -6,12 +6,13 @@ This script will export device metrics of MIST Access Points from the MIST API.
 The format of the exported metrics can be used in Prometheus.
 This script is well suited to be called from exporter_exporter.
 
-Last Change: 22.01.2024 M. Lueckert
+Last Change: 29.04.2025 M. Lueckert
 
 """
 
 import sys
 import argparse
+import time
 import requests as req
 import urllib3
 import json
@@ -294,6 +295,16 @@ def get_devices(baseurl, siteids: list, headers, verify) -> list:
     json_list = []
     for siteid in siteids:
         url = f"{baseurl}/sites/{siteid}/stats/devices?limit=1000"
+        max_retries = 3
+        for retry_count in range(max_retries):
+            response = req.get(url, headers=headers, verify=verify)
+            if response.status_code == 400 and retry_count < 2:
+                logging.warning(
+                    f"Retrying getting device details for site {siteid}. Got error 400 on try {retry_count+1}."
+                )
+                time.sleep(1)
+            else:
+                break
         test_status_code(response)
         rjson = response.json()
         if response.status_code != 200:
